@@ -16,7 +16,6 @@ limitations under the License.
 
 from pathlib import Path
 import sys
-from datetime import datetime, timedelta
 import time
 import shutil
 
@@ -31,26 +30,19 @@ from deeppavlov.core.commands.utils import get_project_root
 log = get_logger(__name__)
 
 CONFIG_PATH = str(get_project_root()) + '/deeppavlov/configs/odqa/generic_ranker.json'
-
-PERIOD = timedelta(minutes=5)
-NEXT_TIME = datetime.now() + PERIOD
-MINUTES = 0
+TIMESTAMP = 0
 
 
-def check_data_changed():
-    global NEXT_TIME
-    global MINUTES
-    if NEXT_TIME <= datetime.now():
-        MINUTES += 1
-        NEXT_TIME += PERIOD
+def check_data_changed(fpath):
+    global TIMESTAMP
+    stamp = fpath.stat().st_mtime
+    if stamp > TIMESTAMP:
+        TIMESTAMP = stamp
         return True
-    else:
-        NEXT_TIME = datetime.now() + PERIOD
-        MINUTES = 0
-        return False
+    return False
 
 
-def build_chainer(check_time):
+def build_chainer():
     config = read_json(CONFIG_PATH)
     save_path = Path(config['dataset_reader']['save_path']).parent
     db_copy_path = save_path / 'data_copy.db'
@@ -60,41 +52,31 @@ def build_chainer(check_time):
     tfidf_copy_path = save_path / 'tfidf_copy.npz'
 
     lock_path = save_path / '.lock'
-    if check_time:
-        if check_data_changed():
+    try:
+        if check_data_changed(db_copy_path):
             if not lock_path.exists():
                 if db_copy_path.exists() and tfidf_copy_path.exists():
                     shutil.copy(str(db_copy_path), str(db_path))
                     shutil.copy(str(tfidf_copy_path), str(tfidf_path))
-                    db_copy_path.unlink()
+                    # db_copy_path.unlink()
+                    # tfidf_copy_path.unlink()
                     config = read_json(CONFIG_PATH)
                     chainer = build_model_from_config(config)
                     return chainer
-    else:
-        if not lock_path.exists():
-            if db_copy_path.exists() and tfidf_copy_path.exists():
-                shutil.copy(str(db_copy_path), str(db_path))
-                shutil.copy(str(tfidf_copy_path), str(tfidf_path))
-                db_copy_path.unlink()
-                config = read_json(CONFIG_PATH)
-                chainer = build_model_from_config(config)
-                return chainer
+    except FileNotFoundError:
+        return None
 
 
 if __name__ == "__main__":
     try:
-        _chainer = build_chainer(check_time=False)
+        chainer = build_chainer()
     except Exception:
         time.sleep(2)
-        _chainer = build_chainer(check_time=False)
+        chainer = build_chainer()
     while True:
-        try:
-            new_chainer = build_chainer(check_time=True)
-            if new_chainer:
-                _chainer = new_chainer
-            query = input("Question: ")
-            print()
-            context = _chainer([query.strip()])[0][0]
-            print(context)
-        except Exception:
-            continue
+        new_chainer = build_chainer()
+        if new_chainer:
+            chainer = new_chainer
+        query = input("Question: ")
+        context = chainer([query.strip()])[0][0]
+        print(context)

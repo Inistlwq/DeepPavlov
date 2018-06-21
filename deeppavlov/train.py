@@ -19,13 +19,12 @@ from pathlib import Path
 import sys
 import os
 import time
-import shutil
 
 p = (Path(__file__) / ".." / "..").resolve()
 sys.path.append(str(p))
 
 from deeppavlov.core.commands.train import train_evaluate_model_from_config
-from deeppavlov.core.commands.utils import get_project_root
+from deeppavlov.core.commands.utils import get_project_root, is_empty
 from deeppavlov.core.common.file import read_json, save_json
 from deeppavlov.core.common.log import get_logger
 
@@ -41,6 +40,8 @@ output_path.mkdir(parents=True, exist_ok=True)
 
 TEMPLATE_CONFIG_PATH = str(get_project_root()) + '/deeppavlov/configs/odqa/ru_ranker_template.json'
 NEW_CONFIG_PATH = str(get_project_root()) + '/deeppavlov/configs/odqa/generic_ranker.json'
+
+DIR_LEN = 0
 
 
 def generate_config(template_path, db_path, tfidf_path):
@@ -63,21 +64,37 @@ def generate_config(template_path, db_path, tfidf_path):
 
 
 def train():
-    config = generate_config(TEMPLATE_CONFIG_PATH, 'data_copy.db', 'tfidf_copy.npz')
-    train_evaluate_model_from_config(config, pass_config=True)
+    train_config = generate_config(TEMPLATE_CONFIG_PATH, 'data_copy.db', 'tfidf_copy.npz')
+    train_evaluate_model_from_config(train_config, pass_config=True)
     log.info("Successfully trained and stored result in {}".format(output_path))
 
 
 if __name__ == "__main__":
 
-    new_config = generate_config(TEMPLATE_CONFIG_PATH, 'data.db', 'tfidf.npz')
-    save_json(new_config, NEW_CONFIG_PATH)
+    infer_config = generate_config(TEMPLATE_CONFIG_PATH, 'data.db', 'tfidf.npz')
+    save_json(infer_config, NEW_CONFIG_PATH)
+
+    lorem_ipsum_path = input_path / 'lorem_ipsum.txt'
 
     while True:
-        log.info("Locked.")
-        lock_path = Path(output_path / '.lock')
-        lock_path.touch(mode=0o777)
-        train()
-        lock_path.unlink()
-        log.info("Sleeping...\n")
-        time.sleep(180)
+        if is_empty(input_path):
+            print("No files in input path.")
+            with open(lorem_ipsum_path, 'w') as fout:
+                fout.write("Lorem ipsum")
+            time.sleep(10)
+            continue
+        else:
+            if lorem_ipsum_path.exists():
+                lorem_ipsum_path.unlink()
+            # stamp = max((f.stat().st_mtime, f) for f in input_path.iterdir())[0]
+            dir_len = len(list(input_path.iterdir()))
+            if dir_len > DIR_LEN:
+                DIR_LEN = dir_len
+                log.info("Locked.")
+                lock_path = Path(output_path / '.lock')
+                lock_path.touch(mode=0o777)
+                train()
+                lock_path.unlink()
+                log.info("Sleeping...\n")
+            time.sleep(10)
+            continue
