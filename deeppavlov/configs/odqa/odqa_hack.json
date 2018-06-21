@@ -8,7 +8,7 @@
     ],
     "pipe": [
       {
-        "config_path": "../deeppavlov/configs/odqa/ru_ranker_prod.json",
+        "config_path": "../deeppavlov/configs/odqa/ru_ranker_wiki.json",
         "in": [
           "question_raw"
         ],
