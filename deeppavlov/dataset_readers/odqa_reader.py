@@ -23,7 +23,6 @@ from multiprocessing import Pool
 
 from tqdm import tqdm
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -69,8 +68,9 @@ def _build_db(save_path, dataset_format, data_path: Union[Path, str], num_worker
 
     with tqdm(total=len(files)) as pbar:
         for data in tqdm(workers.imap_unordered(fn, files)):
-            c.executemany("INSERT INTO documents VALUES (?,?)", data)
-            pbar.update()
+            if data:
+                c.executemany("INSERT INTO documents VALUES (?,?)", data)
+                pbar.update()
 
     conn.commit()
     conn.close()
@@ -78,17 +78,22 @@ def _build_db(save_path, dataset_format, data_path: Union[Path, str], num_worker
     # @staticmethod
 
 
-def _get_file_contents(fpath) -> List[Tuple[str, str]]:
+def _get_file_contents(fpath) -> Union[List[Tuple[str, str]], None]:
     """
     Read a single txt file.
     :param fpath: path to a txt file
     :return: tuple of file names and contents
     """
-    with open(fpath) as fin:
-        text = fin.read()
-        normalized_title = unicodedata.normalize('NFD', fpath.name)
-        normalized_text = unicodedata.normalize('NFD', text)
-        return [(normalized_title, normalized_text)]
+    try:
+        with open(fpath) as fin:
+            text = fin.read()
+            normalized_title = unicodedata.normalize('NFD', fpath.name)
+            normalized_text = unicodedata.normalize('NFD', text)
+            return [(normalized_title, normalized_text)]
+    except UnicodeDecodeError as e:
+        logger.exception(e)
+        logger.info("Files should be in UTF-8")
+        return
 
 
 def _get_json_contents(fpath) -> List[Tuple[str, str]]:
@@ -129,9 +134,6 @@ def _get_wiki_contents(fpath) -> List[Tuple[str, str]]:
             normalized_text = unicodedata.normalize('NFD', text)
             docs.append((normalized_title, normalized_text))
     return docs
-
-
-
 
 # reader = ODQADataReader()
 # reader.read(data_path='/media/olga/Data/projects/ODQA/data/PMEF/original/Текст_сбер_корп_ru',
