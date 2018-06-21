@@ -19,6 +19,7 @@ from pathlib import Path
 import sys
 import os
 import time
+import shutil
 
 p = (Path(__file__) / ".." / "..").resolve()
 sys.path.append(str(p))
@@ -36,16 +37,16 @@ parser.add_argument("output_path", help="Path to a folder with trained data.", t
 args = parser.parse_args()
 input_path = Path(args.input_path).resolve()
 output_path = Path(args.output_path).resolve()
-output_path.mkdir(exist_ok=True)
+output_path.mkdir(parents=True, exist_ok=True)
 
-TEMPLATE_CONFIG_PATH = str(get_project_root()) + '/deeppavlov/configs/odqa/ru_ranker.json'
+TEMPLATE_CONFIG_PATH = str(get_project_root()) + '/deeppavlov/configs/odqa/ru_ranker_template.json'
 NEW_CONFIG_PATH = str(get_project_root()) + '/deeppavlov/configs/odqa/generic_ranker.json'
 
 
-def generate_config(template_path):
+def generate_config(template_path, db_path, tfidf_path):
     config = read_json(template_path)
     config['dataset_reader']['data_path'] = str(input_path)
-    db_path = os.path.join(output_path, 'data.db')
+    db_path = os.path.join(output_path, db_path)
     config['dataset_reader']['save_path'] = config['dataset_iterator']['load_path'] = \
         config['chainer']['pipe'][1]['load_path'] = db_path
 
@@ -56,24 +57,27 @@ def generate_config(template_path):
 
     config['chainer']['pipe'][0]['vectorizer']['save_path'] = \
         config['chainer']['pipe'][0]['vectorizer'][
-            'load_path'] = os.path.join(output_path, 'tfidf.npz')
-
-    save_json(config, NEW_CONFIG_PATH)
+            'load_path'] = os.path.join(output_path, tfidf_path)
 
     return config
 
 
-def train(config):
-    try:
-        train_evaluate_model_from_config(config, pass_config=True)
-        log.info("Successfully trained and stored result in {}".format(output_path))
-    except Exception:
-        raise
+def train():
+    config = generate_config(TEMPLATE_CONFIG_PATH, 'data_copy.db', 'tfidf_copy.npz')
+    train_evaluate_model_from_config(config, pass_config=True)
+    log.info("Successfully trained and stored result in {}".format(output_path))
 
 
 if __name__ == "__main__":
+
+    new_config = generate_config(TEMPLATE_CONFIG_PATH, 'data.db', 'tfidf.npz')
+    save_json(new_config, NEW_CONFIG_PATH)
+
     while True:
-        new_config = generate_config(TEMPLATE_CONFIG_PATH)
-        train(new_config)
+        log.info("Locked.")
+        lock_path = Path(output_path / '.lock')
+        lock_path.touch(mode=0o777)
+        train()
+        lock_path.unlink()
         log.info("Sleeping...\n")
         time.sleep(180)
