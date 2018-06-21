@@ -89,13 +89,20 @@ class TfidfRanker(Estimator):
             else:
                 thresh = len(self.doc_index)
 
+            if scores.size == 1:
+                doc_ids = [self.index2doc[0]]
+                batch_doc_ids.append(doc_ids)
+                batch_docs_scores.append([float(scores)])
+                continue
+
             if thresh >= len(scores):
                 o = np.argpartition(-scores, len(scores) - 1)[0:thresh]
+                o_sort = o[np.argsort(-scores[o])]
+                doc_scores = scores[o_sort]
             else:
                 o = np.argpartition(-scores, thresh)[0:thresh]
-            o_sort = o[np.argsort(-scores[o])]
-
-            doc_scores = scores[o_sort]
+                o_sort = o[np.argsort(-scores[o])]
+                doc_scores = scores[o_sort]
             doc_ids = [self.index2doc[i] for i in o_sort]
             batch_doc_ids.append(doc_ids)
             batch_docs_scores.append(doc_scores)
